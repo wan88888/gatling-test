@@ -6,11 +6,17 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   performance-test:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     permissions:
-      contents: write
       pages: write
       id-token: write
 
