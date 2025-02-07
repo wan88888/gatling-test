@@ -6,65 +6,89 @@ on:
   pull_request:
     branches: [ main ]
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 jobs:
-  build-and-test:
+  performance-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-    - name: Set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: maven
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
 
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      - name: Run Gatling Test
+        run: mvn gatling:test
 
-    - name: Run Gatling Tests
-      run: mvn gatling:test
+      - name: Archive Gatling Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: gatling-report
+          path: target/gatling/*
 
-    - name: Archive Gatling Reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: gatling-test-reports
-        path: target/gatling/
-        retention-days: 30
+      - name: Setup Pages
+        uses: actions/configure-pages@v3
 
-    - name: Setup Pages
-      uses: actions/configure-pages@v4
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: target/gatling
 
-    - name: Upload Pages artifact
-      uses: actions/upload-pages-artifact@v4
-      with:
-        path: target/gatling/
-
-  deploy:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v2
 
-      - name: Send Report URL to Feishu
-        if: success()
+      - name: Send Report to Feishu
         env:
           FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
-          REPORT_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
-          curl -X POST -H "Content-Type: application/json" \
-          -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"Gatling性能测试报告已生成：${{ steps.deployment.outputs.page_url }}\"}}"\
-          ${{ secrets.FEISHU_WEBHOOK }}
+          # 获取最新的测试报告目录
+          REPORT_DIR=$(ls -td target/gatling/* | head -1)
+          # 提取测试结果数据
+          TOTAL_REQUESTS=$(grep -r "request count" "$REPORT_DIR/js/stats.json" | grep -o '[0-9]\+')
+          SUCCESS_RATE=$(grep -r "successfulRequests.percent" "$REPORT_DIR/js/assertions.json" | grep -o '[0-9]\+\.[0-9]\+')
+          MAX_RESPONSE_TIME=$(grep -r "responseTime.max" "$REPORT_DIR/js/assertions.json" | grep -o '[0-9]\+')
+          
+          # 构建飞书消息
+          MESSAGE="{
+            \"msg_type\": \"post\",
+            \"content\": {
+              \"post\": {
+                \"zh_cn\": {
+                  \"title\": \"Gatling性能测试报告\",
+                  \"content\": [
+                    [{
+                      \"tag\": \"text\",
+                      \"text\": \"✅ 性能测试已完成\n\n\"
+                    }],
+                    [{
+                      \"tag\": \"text\",
+                      \"text\": \"📊 测试结果:\n\"
+                    }],
+                    [{
+                      \"tag\": \"text\",
+                      \"text\": \"• 总请求数: ${TOTAL_REQUESTS}\n• 成功率: ${SUCCESS_RATE}%\n• 最大响应时间: ${MAX_RESPONSE_TIME}ms\n\"
+                    }],
+                    [{
+                      \"tag\": \"text\",
+                      \"text\": \"📈 详细报告: \"
+                    }, {
+                      \"tag\": \"a\",
+                      \"text\": \"查看完整报告\",
+                      \"href\": \"${{ steps.deployment.outputs.page_url }}\"
+                    }]
+                  ]
+                }
+              }
+            }
+          }"
+          
+          # 发送到飞书
+          curl -X POST -H "Content-Type: application/json" -d "$MESSAGE" "$FEISHU_WEBHOOK"
