@@ -1,0 +1,32 @@
+# Maven
+target/
+*.class
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Mac
+.DS_Store
+
+# Gatling
+results/
+
+# Logs
+*.log
+
+# Scala
+.scala_dependencies
+.worksheet
+.metals/
+.bloop/
+.bsp/
+
+# Temp files
+*~
+.#*
+#*#
+*.swp
