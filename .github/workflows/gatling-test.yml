@@ -7,9 +7,18 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   performance-test:
     runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
     - uses: actions/checkout@v3
@@ -31,3 +40,36 @@ jobs:
         name: gatling-reports
         path: target/gatling/**/*
         retention-days: 30
+
+    - name: Setup Pages
+      if: always()
+      uses: actions/configure-pages@v4
+
+    - name: Upload Pages Artifact
+      if: always()
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: target/gatling
+
+    - name: Deploy to GitHub Pages
+      if: always()
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+    - name: Send Feishu Notification
+      if: success()
+      uses: foxundermoon/feishu-action@v2
+      with:
+        url: ${{ secrets.FEISHU_WEBHOOK }}
+        msg_type: post
+        content: |
+          {"zh_cn": {
+            "title": "Gatling性能测试报告",
+            "content": [
+              [
+                {"tag": "text", "text": "性能测试已完成！\n"},
+                {"tag": "text", "text": "测试报告链接："},
+                {"tag": "a", "text": "点击查看", "href": "${{ steps.deployment.outputs.page_url }}"}
+              ]
+            ]
+          }}
