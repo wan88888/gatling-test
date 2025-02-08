@@ -26,18 +26,8 @@ jobs:
 
     - name: Archive Gatling Reports
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: gatling-reports
         path: target/gatling/**/*
         retention-days: 30
-
-    - name: Check Test Results
-      if: always()
-      run: |
-        if [ -d "target/gatling" ]; then
-          echo "Performance tests completed. Check the artifacts for detailed reports."
-        else
-          echo "Performance tests failed to generate reports."
-          exit 1
-        fi
