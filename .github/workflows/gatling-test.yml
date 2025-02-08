@@ -50,11 +50,17 @@ jobs:
     - name: Prepare Pages Content
       if: always()
       run: |
-        # 获取最新的报告目录
-        LATEST_REPORT=$(ls -t target/gatling | head -n 1)
-        # 移动最新报告到临时目录
+        # 创建临时目录
         mkdir -p temp_pages
-        mv target/gatling/$LATEST_REPORT/* temp_pages/
+        # 获取最新的报告目录（排除lastRun.txt文件）
+        LATEST_REPORT=$(find target/gatling -maxdepth 1 -type d -not -name 'gatling' | sort -r | head -n 1)
+        if [ -d "$LATEST_REPORT" ]; then
+          # 移动最新报告到临时目录
+          cp -r $LATEST_REPORT/* temp_pages/
+        else
+          echo "No Gatling report directory found"
+          exit 1
+        fi
 
     - name: Upload Pages Artifact
       if: always()
