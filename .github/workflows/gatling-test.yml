@@ -47,32 +47,39 @@ jobs:
       if: always()
       uses: actions/configure-pages@v4
 
+    - name: Prepare Pages Content
+      if: always()
+      run: |
+        # 获取最新的报告目录
+        LATEST_REPORT=$(ls -t target/gatling | head -n 1)
+        # 移动最新报告到临时目录
+        mkdir -p temp_pages
+        mv target/gatling/$LATEST_REPORT/* temp_pages/
+
     - name: Upload Pages Artifact
       if: always()
       uses: actions/upload-pages-artifact@v3
       with:
         name: github-pages
-        path: target/gatling
+        path: temp_pages
 
     - name: Deploy to GitHub Pages
-      if: always()
+      if: always() && github.ref == 'refs/heads/main'
       id: deployment
       uses: actions/deploy-pages@v4
-
-    - name: Send Feishu Notification
-      if: success()
-      uses: foxundermoon/feishu-action@v2
       with:
-        url: ${{ secrets.FEISHU_WEBHOOK }}
-        msg_type: post
-        content: |
-          {"zh_cn": {
-            "title": "Gatling性能测试报告",
-            "content": [
-              [
-                {"tag": "text", "text": "性能测试已完成！\n"},
-                {"tag": "text", "text": "测试报告链接："},
-                {"tag": "a", "text": "点击查看", "href": "${{ steps.deployment.outputs.page_url }}"}
-              ]
-            ]
-          }}
+        token: ${{ secrets.GATLING_TOKEN }}
+
+    - name: Send report to Feishu
+      if: success()
+      run: |
+        # 获取测试结果状态
+        TEST_STATUS="${{ job.status }}"
+        
+        # 构建消息内容
+        MESSAGE='{"msg_type":"interactive","card":{"config":{"wide_screen_mode":true},"header":{"title":{"tag":"plain_text","content":"Gatling性能测试报告"}},"elements":[{"tag":"div","text":{"tag":"plain_text","content":"性能测试已完成！"}},{"tag":"div","text":{"tag":"plain_text","content":"测试状态: ${{ job.status }}"}},{"tag":"action","actions":[{"tag":"button","text":{"tag":"plain_text","content":"查看详细报告"},"url":"${{ steps.deployment.outputs.page_url }}","type":"primary"}]}]}}'
+        
+        # 发送到飞书
+        curl -X POST -H "Content-Type: application/json" \
+          -d "$MESSAGE" \
+          "${{ secrets.FEISHU_WEBHOOK }}"
