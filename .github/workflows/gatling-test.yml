@@ -52,7 +52,7 @@ jobs:
       if: always()
       uses: actions/upload-pages-artifact@v3
       with:
-        path: target/gatling
+        path: target/gatling/*
 
     - name: Deploy to GitHub Pages
       if: always()
